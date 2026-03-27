@@ -48,12 +48,21 @@ class ProductController extends Controller
                 }
             }
 
+            // Process multiple images
+            $images = [];
+            if ($product->images && is_array($product->images)) {
+                foreach ($product->images as $image) {
+                    $images[] = asset('storage/' . $image);
+                }
+            }
+
             return [
                 'id' => $product->id,
                 'name' => $product->name,
                 'category' => $product->category,
-                // 'image' => $product->image ? url('storage/' . $product->image) : null,
+                'description' => $product->description,
                 'image' => $product->image ? asset('storage/' . $product->image) : null,
+                'images' => $images,
                 'original_price' => $originalPrice,
                 'final_price' => round(max(0, $finalPrice), 2),
                 'hasOffer' => $hasOffer,
@@ -64,6 +73,72 @@ class ProductController extends Controller
         return response()->json($products);
     }
 
+    // GET SINGLE PRODUCT
+    public function show($id)
+    {
+        $product = Product::with('offer')->find($id);
+
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+
+        $originalPrice = (float)$product->price;
+        $finalPrice = $originalPrice;
+        $hasOffer = false;
+        $offerData = null;
+
+        // Check if product has offer
+        if ($product->offer) {
+            $startDate = Carbon::parse($product->offer->start_date);
+            $endDate = Carbon::parse($product->offer->end_date);
+            $now = Carbon::now();
+            
+            if ($product->offer->is_active && $now->between($startDate, $endDate)) {
+                $hasOffer = true;
+                
+                if ($product->offer->type === 'percentage') {
+                    $discount = ($originalPrice * $product->offer->value) / 100;
+                    $finalPrice = $originalPrice - $discount;
+                } else {
+                    $finalPrice = $originalPrice - $product->offer->value;
+                }
+                
+                $offerData = [
+                    'id' => $product->offer->id,
+                    'type' => $product->offer->type,
+                    'value' => (float)$product->offer->value,
+                    'start_date' => $product->offer->start_date,
+                    'end_date' => $product->offer->end_date,
+                    'is_active' => (bool)$product->offer->is_active
+                ];
+            }
+        }
+
+        // Process multiple images
+        $images = [];
+        if ($product->images && is_array($product->images)) {
+            foreach ($product->images as $image) {
+                $images[] = asset('storage/' . $image);
+            }
+        }
+
+        return response()->json([
+            'id' => $product->id,
+            'name' => $product->name,
+            'category' => $product->category,
+            'description' => $product->description,
+            'image' => $product->image ? asset('storage/' . $product->image) : null,
+            'images' => $images,
+            'original_price' => $originalPrice,
+            'final_price' => round(max(0, $finalPrice), 2),
+            'hasOffer' => $hasOffer,
+            'offer' => $offerData
+        ]);
+    }
+
     // CREATE PRODUCT
     public function store(Request $request)
     {
@@ -71,7 +146,9 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'category' => 'required|string',
+            'description' => 'nullable|string',
             'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048' // Multiple images validation
         ]);
 
         if ($validator->fails()) {
@@ -82,15 +159,26 @@ class ProductController extends Controller
         }
 
         try {
-            // Upload image
+            // Upload main image
             $imagePath = $request->file('image')->store('products', 'public');
+
+            // Upload multiple images
+            $imagePaths = [];
+            if ($request->hasFile('images')) {
+                foreach ($request->file('images') as $image) {
+                    $path = $image->store('products', 'public');
+                    $imagePaths[] = $path;
+                }
+            }
 
             // Create product
             $product = Product::create([
                 'name' => $request->name,
                 'price' => $request->price,
                 'category' => $request->category,
+                'description' => $request->description,
                 'image' => $imagePath,
+                'images' => $imagePaths,
             ]);
 
             return response()->json([
@@ -123,7 +211,9 @@ class ProductController extends Controller
             'name' => 'sometimes|string|max:255',
             'price' => 'sometimes|numeric|min:0',
             'category' => 'sometimes|string',
+            'description' => 'nullable|string',
             'image' => 'sometimes|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048'
         ]);
 
         if ($validator->fails()) {
@@ -134,7 +224,7 @@ class ProductController extends Controller
         }
 
         try {
-            // Update image if provided
+            // Update main image if provided
             if ($request->hasFile('image')) {
                 // Delete old image
                 if ($product->image) {
@@ -144,9 +234,27 @@ class ProductController extends Controller
                 $product->image = $imagePath;
             }
 
+            // Update multiple images if provided
+            if ($request->hasFile('images')) {
+                // Delete old images
+                if ($product->images && is_array($product->images)) {
+                    foreach ($product->images as $oldImage) {
+                        Storage::disk('public')->delete($oldImage);
+                    }
+                }
+                
+                $imagePaths = [];
+                foreach ($request->file('images') as $image) {
+                    $path = $image->store('products', 'public');
+                    $imagePaths[] = $path;
+                }
+                $product->images = $imagePaths;
+            }
+
             $product->name = $request->name ?? $product->name;
             $product->price = $request->price ?? $product->price;
             $product->category = $request->category ?? $product->category;
+            $product->description = $request->description ?? $product->description;
             $product->save();
 
             return response()->json([
@@ -176,9 +284,16 @@ class ProductController extends Controller
         }
 
         try {
-            // Delete image
+            // Delete main image
             if ($product->image) {
                 Storage::disk('public')->delete($product->image);
+            }
+
+            // Delete multiple images
+            if ($product->images && is_array($product->images)) {
+                foreach ($product->images as $image) {
+                    Storage::disk('public')->delete($image);
+                }
             }
 
             $product->delete();

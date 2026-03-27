@@ -13,7 +13,14 @@ class Product extends Model
         'name',
         'price',
         'category',
-        'image'
+        'image',
+        'images', // Add this for multiple images
+        'description' // Add description field
+    ];
+
+    protected $casts = [
+        'images' => 'array', // Cast images as array
+        'price' => 'decimal:2'
     ];
 
     public function offer()

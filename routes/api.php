@@ -13,6 +13,7 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/contact', [ContactController::class, 'store']);
 Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/{id}', [ProductController::class, 'show']); // Add this route for single product
 
 // Product create public (without auth)
 Route::post('/products', [ProductController::class, 'store']);
