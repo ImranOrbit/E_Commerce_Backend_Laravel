@@ -11,6 +11,8 @@ class Order extends Model
 
     protected $fillable = [
         'user_id',
+        'customer_name',    // Add this for guest checkout
+        'customer_email',   // Add this for guest checkout
         'total',
         'total_amount',
         'shipping_address',

@@ -13,12 +13,13 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/contact', [ContactController::class, 'store']);
 Route::get('/products', [ProductController::class, 'index']);
-Route::get('/products/{id}', [ProductController::class, 'show']); // Add this route for single product
-
-// Product create public (without auth)
+Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::post('/products', [ProductController::class, 'store']);
 
-// Protected Routes
+// Guest Order Route (no authentication required)
+Route::post('/orders', [OrderController::class, 'store']);
+
+// Protected Routes (require authentication)
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -36,8 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/offers', [OfferController::class, 'index']);
     Route::get('/offers/{id}', [OfferController::class, 'show']);
     
-    // Order Routes
-    Route::post('/orders', [OrderController::class, 'store']);
+    // Order Routes for authenticated users
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
 });
