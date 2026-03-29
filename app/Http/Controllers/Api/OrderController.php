@@ -94,8 +94,12 @@ class OrderController extends Controller
             ], 401);
         }
         
+        // FIXED: Get orders by user_id OR by customer_email
         $orders = Order::with('items.product')
-            ->where('user_id', $user->id)
+            ->where(function($query) use ($user) {
+                $query->where('user_id', $user->id)
+                      ->orWhere('customer_email', $user->email);
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -118,8 +122,8 @@ class OrderController extends Controller
             ], 404);
         }
         
-        // For logged-in users, check if they own the order
-        if ($user && $order->user_id == $user->id) {
+        // For logged-in users, check if they own the order OR email matches
+        if ($user && ($order->user_id == $user->id || $order->customer_email == $user->email)) {
             return response()->json([
                 'success' => true,
                 'data' => $order
